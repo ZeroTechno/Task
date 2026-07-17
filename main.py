@@ -1,8 +1,35 @@
+import os
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel
 from typing import Optional
+from dotenv import load_dotenv
+
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
 
 app = FastAPI()
+
+def get_db_connection():
+    # Establishes a raw network connection to the Postgres container
+    return psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+
+@app.on_event("startup")
+def setup_database():
+    """Executes when the app turns on, ensuring our database table exists."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            done BOOLEAN DEFAULT FALSE
+        );
+    """)
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 class TaskCreate(BaseModel):
     title: str
@@ -11,16 +38,9 @@ class TaskUpdate(BaseModel):
     title: Optional[str] = None
     done: Optional[bool] = None
 
-tasks = [
-    {"id": 1, "title": "Finish Stage 1", "done": True},
-    {"id": 2, "title": "Build Stage 2 of CRUD", "done": False},
-    {"id": 3, "title": "Go for a run", "done": False}
-]
-next_id = 4
-
 @app.get("/")
 def get_api_info():
-    return {"name": "Task API", "version": "1.0", "endpoints": ["/tasks"]}
+    return {"name": "Task API", "version": "2.0", "storage": "PostgreSQL"}
 
 @app.get("/health")
 def get_health():
@@ -28,46 +48,85 @@ def get_health():
 
 @app.get("/tasks")
 def get_tasks():
-    return tasks
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks ORDER BY id ASC;")
+    all_tasks = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return all_tasks
 
 @app.get("/tasks/{task_id}")
 def get_task(task_id: int):
-    for task in tasks:
-        if task["id"] == task_id:
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE id = %s;", (task_id,))
+    task = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not task:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return task
 
 @app.post("/tasks", status_code=status.HTTP_201_CREATED)
 def create_task(task_data: TaskCreate):
-    global next_id
     clean_title = task_data.title.strip()
     if not clean_title:
         raise HTTPException(status_code=400, detail="Title cannot be empty")
-    new_task = {"id": next_id, "title": clean_title, "done": False}
-    tasks.append(new_task)
-    next_id += 1
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO tasks (title, done) VALUES (%s, %s) RETURNING id, title, done;",
+        (clean_title, False)
+    )
+    new_task = cursor.fetchone()
+    conn.commit()
+    cursor.close()
+    conn.close()
     return new_task
 
-# PUT: Update
 @app.put("/tasks/{task_id}")
 def update_task(task_id: int, task_data: TaskUpdate):
-    for task in tasks:
-        if task["id"] == task_id:
-            if task_data.title is not None:
-                clean_title = task_data.title.strip()
-                if not clean_title:
-                    raise HTTPException(status_code=400, detail="Title cannot be empty")
-                task["title"] = clean_title
-            if task_data.done is not None:
-                task["done"] = task_data.done
-            return task
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM tasks WHERE id = %s;", (task_id,))
+    task = cursor.fetchone()
+    if not task:
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        
+    title = task_data.title.strip() if task_data.title is not None else task["title"]
+    done = task_data.done if task_data.done is not None else task["done"]
+    
+    if not title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
 
-# DELETE
+    cursor.execute(
+        "UPDATE tasks SET title = %s, done = %s WHERE id = %s RETURNING id, title, done;",
+        (title, done, task_id)
+    )
+    updated_task = cursor.fetchone()
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return updated_task
+
 @app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_task(task_id: int):
-    for index, task in enumerate(tasks):
-        if task["id"] == task_id:
-            tasks.pop(index)
-            return
-    raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM tasks WHERE id = %s;", (task_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+        
+    cursor.execute("DELETE FROM tasks WHERE id = %s;", (task_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return
