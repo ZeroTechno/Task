@@ -53,3 +53,30 @@ def get_api_info():
 @app.get("/health")
 def get_health():
     return {"status": "ok"}
+
+# This is the Helper to convert SQLite Row objects to Python dictionaries
+def row_to_dict(row):
+    return {"id": row["id"], "title": row["title"], "done": bool(row["done"])}
+
+@app.get("/tasks")
+def get_tasks():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks ORDER BY id ASC;")
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [row_to_dict(row) for row in rows]
+
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return row_to_dict(row)
