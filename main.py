@@ -95,7 +95,7 @@ def create_task(task_data: TaskCreate):
     cursor.execute(
         "INSERT INTO tasks (title, done) VALUES (?, ?);",
         (clean_title, False)
-    )
+    ) 
     new_id = cursor.lastrowid
     conn.commit()
     
@@ -106,3 +106,60 @@ def create_task(task_data: TaskCreate):
     conn.close()
     
     return row_to_dict(new_row)
+
+#this is the PUT and DELETE queries
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    done: Optional[bool] = None
+
+@app.put("/tasks/{task_id}")
+def update_task(task_id: int, task_data: TaskUpdate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Verify task exists
+    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
+    existing = cursor.fetchone()
+    if not existing:
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    # Get values or retain old ones
+    title = task_data.title.strip() if task_data.title is not None else existing["title"]
+    done = task_data.done if task_data.done is not None else existing["done"]
+    
+    if not title:
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+
+    cursor.execute(
+        "UPDATE tasks SET title = ?, done = ? WHERE id = ?;",
+        (title, done, task_id)
+    )
+    conn.commit()
+    
+    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
+    updated_row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    return row_to_dict(updated_row)
+
+@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(task_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    cursor.execute("DELETE FROM tasks WHERE id = ?;", (task_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return
