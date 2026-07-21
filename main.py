@@ -80,3 +80,29 @@ def get_task(task_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Task not found")
     return row_to_dict(row)
+
+class TaskCreate(BaseModel):
+    title: str
+
+@app.post("/tasks", status_code=status.HTTP_201_CREATED)
+def create_task(task_data: TaskCreate):
+    clean_title = task_data.title.strip()
+    if not clean_title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+        
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO tasks (title, done) VALUES (?, ?);",
+        (clean_title, False)
+    )
+    new_id = cursor.lastrowid
+    conn.commit()
+    
+    # it will fetch created task to return it
+    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (new_id,))
+    new_row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    return row_to_dict(new_row)
