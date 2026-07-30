@@ -85,4 +85,4 @@ Endpoint		Method	Auth Required		Description
 
 ![Swagger UI Screenshot1](./swagger-auth-screenshot1.png)
 ![Swagger UI Screenshot2](./swagger-auth-screenshot2.png)
->>>>>>> c1b5585 (Stage 6: publish to GitHub and write README)
+
