@@ -97,3 +97,17 @@ def get_profile(user=Depends(get_current_user)):
         "email": user.email,
         "created_at": user.created_at
     }
+
+# --- STAGE 4: MIDDLEWARE DEPENDENCY & LOGOUT
+@app.get("/protected/dashboard")
+def get_dashboard(user=Depends(get_current_user)):
+    return {"message": f"Welcome to your private dashboard, {user.email}!"}
+
+@app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    token = credentials.credentials
+    try:
+        supabase.auth.sign_out(token)
+    except Exception:
+        pass
+    return
