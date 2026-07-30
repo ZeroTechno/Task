@@ -1,165 +1,20 @@
-import sqlite3
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
-from typing import Optional
+import os
+from dotenv import load_dotenv
+from fastapi import FastAPI
+from supabase import create_client, Client
 
-DB_FILE = "tasks.db"
+load_dotenv()
 
-app = FastAPI()
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-def get_db_connection():
-    """Establishes a connection to the SQLite database file."""
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Missing SUPABASE_URL or SUPABASE_KEY in .env file")
 
-@app.on_event("startup")
-def setup_database():
-    """Initializes the database table and seeds 3 initial tasks if empty."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            title TEXT NOT NULL,
-            done BOOLEAN NOT NULL DEFAULT 0
-        );
-    """)
-    conn.commit()
-    
-    cursor.execute("SELECT COUNT(*) FROM tasks;")
-    count = cursor.fetchone()[0]
-    
-    if count == 0:
-        initial_tasks = [
-            ("Finish Stage 0 setup", True),
-            ("Build SQLite read endpoints", False),
-            ("Test database persistence", False)
-        ]
-        cursor.executemany(
-            "INSERT INTO tasks (title, done) VALUES (?, ?);",
-            initial_tasks
-        )
-        conn.commit()
-        
-    cursor.close()
-    conn.close()
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-@app.get("/")
-def get_api_info():
-    return {"name": "Task API", "version": "3.0", "storage": "SQLite"}
+app = FastAPI(title="Auth API with Supabase")
 
 @app.get("/health")
-def get_health():
-    return {"status": "ok"}
-
-# This is the Helper to convert SQLite Row objects to Python dictionaries
-def row_to_dict(row):
-    return {"id": row["id"], "title": row["title"], "done": bool(row["done"])}
-
-@app.get("/tasks")
-def get_tasks():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks ORDER BY id ASC;")
-    rows = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    return [row_to_dict(row) for row in rows]
-
-@app.get("/tasks/{task_id}")
-def get_task(task_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
-    row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    if not row:
-        raise HTTPException(status_code=404, detail="Task not found")
-    return row_to_dict(row)
-
-class TaskCreate(BaseModel):
-    title: str
-
-@app.post("/tasks", status_code=status.HTTP_201_CREATED)
-def create_task(task_data: TaskCreate):
-    clean_title = task_data.title.strip()
-    if not clean_title:
-        raise HTTPException(status_code=400, detail="Title cannot be empty")
-        
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO tasks (title, done) VALUES (?, ?);",
-        (clean_title, False)
-    ) 
-    new_id = cursor.lastrowid
-    conn.commit()
-    
-    # it will fetch created task to return it
-    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (new_id,))
-    new_row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    return row_to_dict(new_row)
-
-#this is the PUT and DELETE queries
-class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    done: Optional[bool] = None
-
-@app.put("/tasks/{task_id}")
-def update_task(task_id: int, task_data: TaskUpdate):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    # Verify task exists
-    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
-    existing = cursor.fetchone()
-    if not existing:
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail="Task not found")
-        
-    # Get values or retain old ones
-    title = task_data.title.strip() if task_data.title is not None else existing["title"]
-    done = task_data.done if task_data.done is not None else existing["done"]
-    
-    if not title:
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=400, detail="Title cannot be empty")
-
-    cursor.execute(
-        "UPDATE tasks SET title = ?, done = ? WHERE id = ?;",
-        (title, done, task_id)
-    )
-    conn.commit()
-    
-    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
-    updated_row = cursor.fetchone()
-    cursor.close()
-    conn.close()
-    
-    return row_to_dict(updated_row)
-
-@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("SELECT * FROM tasks WHERE id = ?;", (task_id,))
-    if not cursor.fetchone():
-        cursor.close()
-        conn.close()
-        raise HTTPException(status_code=404, detail="Task not found")
-        
-    cursor.execute("DELETE FROM tasks WHERE id = ?;", (task_id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return
+def health_check():
+    return {"status": "ok", "message": "Server running and connected to Supabase"}
