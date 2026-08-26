@@ -2,6 +2,7 @@ import os
 import time
 import requests
 import hashlib
+from datetime import datetime, timezone
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
@@ -23,7 +24,7 @@ def fetch_page(url: str, delay_seconds: float = 0.5) -> str:
     time.sleep(delay_seconds)
     response = requests.get(url, headers=HEADERS, timeout=5)
     if response.status_code != 200:
-        raise Exception(f"Failed to fetch {url}, status: {response.status_code}")
+        raise Exception(f"Failed to fetch {url}, status code: {response.status_code}")
 
     content = response.text
     with open(cache_path, "w", encoding="utf-8") as f:
@@ -40,14 +41,12 @@ def discover_book_urls(start_url: str, max_pages: int = 3):
         pages_crawled += 1
         soup = BeautifulSoup(html, "html.parser")
 
-        # Extract all book links from the page
         articles = soup.select("article.product_pod h3 a")
         for a in articles:
             relative_link = a.get("href")
             absolute_link = urljoin(current_url, relative_link)
             book_urls.append(absolute_link)
 
-        # Find "next" page link
         next_btn = soup.select_one("li.next a")
         if next_btn:
             next_href = next_btn.get("href")
@@ -56,9 +55,51 @@ def discover_book_urls(start_url: str, max_pages: int = 3):
             current_url = None
 
     unique_urls = list(dict.fromkeys(book_urls))
-    print(f"catalogue_pages = {pages_crawled}, discovered = {len(book_urls)}, unique_urls = {len(unique_urls)}")
     return unique_urls
+
+def extract_book_details(book_url: str, source_page: str) -> dict:
+    html = fetch_page(book_url)
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Scope selectors specifically to the product area
+    product_main = soup.select_one("div.product_main")
+    
+    title = product_main.select_one("h1").get_text(strip=True) if product_main.select_one("h1") else None
+    price_text = product_main.select_one("p.price_color").get_text(strip=True) if product_main.select_one("p.price_color") else None
+    availability_text = product_main.select_one("p.availability").get_text(strip=True) if product_main.select_one("p.availability") else None
+    
+    # Rating class extraction (e.g., class="star-rating Three")
+    rating_tag = product_main.select_one("p.star-rating")
+    rating_text = None
+    if rating_tag:
+        classes = rating_tag.get("class", [])
+        classes = [c for c in classes if c != "star-rating"]
+        rating_text = classes[0] if classes else None
+
+    # Description is under #product_description + p
+    desc_tag = soup.select_one("#product_description + p")
+    description = desc_tag.get_text(strip=True) if desc_tag else None
+
+    return {
+        "title": title,
+        "product_url": book_url,
+        "price_text": price_text,
+        "availability_text": availability_text,
+        "rating_text": rating_text,
+        "description": description,
+        "source_page": source_page,
+        "fetched_at": datetime.now(timezone.utc).isoformat()
+    }
 
 if __name__ == "__main__":
     start_url = "https://books.toscrape.com/catalogue/page-1.html"
     urls = discover_book_urls(start_url, max_pages=3)
+    
+    raw_records = []
+    for url in urls:
+        record = extract_book_details(url, source_page=start_url)
+        raw_records.append(record)
+        
+    print("--- Stage 3 Sample Raw Record ---")
+    print(raw_records[0])
+    print(f"detail_pages = {len(raw_records)}")
