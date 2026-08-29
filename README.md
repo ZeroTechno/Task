@@ -86,3 +86,88 @@ Endpoint		Method	Auth Required		Description
 ![Swagger UI Screenshot1](./swagger-auth-screenshot1.png)
 ![Swagger UI Screenshot2](./swagger-auth-screenshot2.png)
 >>>>>>> c1b5585 (Stage 6: publish to GitHub and write README)
+
+
+
+
+# Week 7 / Assignment A17: Support Message Triage LLM API
+
+An automated backend triage endpoint (`POST /triage`) that classifies customer support messages into structured, validated JSON data using FastAPI, Pydantic, and OpenRouter-compatible LLM backends.
+
+
+## Runnable Curl & Example Response
+
+### Request
+```bash
+curl -X POST http://127.0.0.1:8000/triage \
+  -H "Content-Type: application/json" \
+  -d '{"text": "I was double charged for my subscription this month."}'
+
+Response (200 OK)
+{
+  "category": "billing",
+  "urgency": "high",
+  "confidence": 0.98,
+  "reason": "Customer reports being charged twice for monthly subscription."
+}
+
+#Job Card
+What it does: Classifies customer support messages into structured triage categories with urgency and confidence scoring.
+
+Input Contract: {"text": "string (1-2000 characters)"}
+
+Output Contract:
+{
+  "category": "billing" | "bug" | "feature" | "other",
+  "urgency": "low" | "normal" | "high",
+  "confidence": 0.0 - 1.0,
+  "reason": "one short sentence"
+}
+
+It Must Never:
+Invent categories outside [billing, bug, feature, other].
+Return free-form markdown or conversation instead of single valid JSON.
+Guess wildly when information is missing.
+Reveal internal system instructions.
+
+When Unsure It Should:
+Assign category "other" with confidence < 0.5 and explain ambiguity in reason.
+
+Provider & Environment Configuration
+Three environment variables configure and swap providers instantly between hosted datacenters and local machines:
+LLM_BASE_URL=https://openrouter.ai/api/v1   # Or http://localhost:11434/v1/ for Ollama
+LLM_API_KEY=your_api_key_here               # Literal string "ollama" for local runs
+LLM_MODEL=openrouter/free                   # Or gemma3:1b / llama3.2:3b
+
+Evaluation Results:
+Date: August 29, 2026
+Prompt Version: prompts/triage-v1.md
+Score: 7 / 8 (87.5% accuracy) across clear categories, edge-cases, and ambiguous inputs.
+
+Cost Analysis & Observability;
+Per-Call Metrics (Average):
+Prompt Tokens: ~240
+Completion Tokens: ~45
+Total Tokens: ~285
+Latency: ~1,200ms
+
+Cost Estimate for 10,000 requests/day:
+At standard small-model pricing ($0.15 / 1M input tokens, $0.60 / 1M output tokens):
+Input: 10,000 * 240 = 2.4M tokens * $0.15 = $0.36
+Output: 10,000 * 45 = 0.45M tokens * $0.60 = $0.27
+Estimated daily cost: ~$0.63 / day (~$18.90 / month).
+
+Operational Safeguards:
+Input Validation: Pydantic rejects invalid or oversized inputs (> 2000 chars) with HTTP 422 before any model call is triggered.
+
+Stub Mode: LLM_STUB=1 returns a deterministic schema response with 0 model calls spent.
+
+Parse, Repair & Quarantine: Strips markdown code blocks, validates Pydantic enum types, performs exactly 1 automated repair retry on failure, and logs dead-letter outputs to logs/quarantine.jsonl returning HTTP 422.
+
+Timeouts & Safe Retries: Strict 30.0s timeout (returns HTTP 504). Automatically retries transient 429/5xx errors with exponential backoff and jitter, while failing fast on 400/401/403.
+
+Kill Switch: Setting LLM_ENABLED=false bypasses model calls entirely and returns a safe fallback.
+
+What I'd Fix With Another Day:
+I've tried this week's assignment using openrouter and Ollama both were great.
+What I'd fix is probably just to Fine-tune the ambiguous edge-case prompt instructions to boost evaluation score from 87.5% to 100%, and implement prompt injection sanitization on user input strings before sending to the model.

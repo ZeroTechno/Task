@@ -1,0 +1,58 @@
+[
+  {
+    "id": 1,
+    "input": "I was double charged on my visa credit card for this month's plan.",
+    "expected_category": "billing",
+    "expected_urgency": "high",
+    "notes": "Direct billing dispute"
+  },
+  {
+    "id": 2,
+    "input": "Can I update my VAT tax number on the next billing invoice?",
+    "expected_category": "billing",
+    "expected_urgency": "normal",
+    "notes": "Standard billing inquiry"
+  },
+  {
+    "id": 3,
+    "input": "Clicking the submit order button returns a 500 internal server error.",
+    "expected_category": "bug",
+    "expected_urgency": "high",
+    "notes": "Critical platform bug"
+  },
+  {
+    "id": 4,
+    "input": "The profile avatar image fails to render on Safari browser.",
+    "expected_category": "bug",
+    "expected_urgency": "normal",
+    "notes": "UI rendering bug"
+  },
+  {
+    "id": 5,
+    "input": "Please add a dark mode toggle to the user settings panel.",
+    "expected_category": "feature",
+    "expected_urgency": "low",
+    "notes": "Standard feature request"
+  },
+  {
+    "id": 6,
+    "input": "It would be great to export dashboard reports directly to Google Sheets.",
+    "expected_category": "feature",
+    "expected_urgency": "normal",
+    "notes": "Feature integration request"
+  },
+  {
+    "id": 7,
+    "input": "Purple clouds dancing quietly under the golden moon.",
+    "expected_category": "other",
+    "expected_urgency": "low",
+    "notes": "Unrelated nonsense, triggers when unsure rule"
+  },
+  {
+    "id": 8,
+    "input": "Hello team, what is your company's physical office mailing address?",
+    "expected_category": "other",
+    "expected_urgency": "low",
+    "notes": "General non-technical query"
+  }
+]
