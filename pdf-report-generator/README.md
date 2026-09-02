@@ -1,9 +1,10 @@
+# PDF Report Generator
+
 An automated backend pipeline that queries an SQLite transactional database, computes aggregation metrics using pure SQL, renders a multi-page PDF document via headless Chromium (Playwright), and serves the resulting artifact by link with built-in daily idempotency.
 
 ---
 
 ## 1. Dataset Selection
-
 - **Chosen Dataset:** Option A — The Little Shop
 - **Schema:** `orders` table (`id`, `customer`, `product`, `amount`, `created_at`).
 - **Volume:** 200 random orders spanning the last 30 days across 6 distinct product catalog items.
@@ -11,7 +12,6 @@ An automated backend pipeline that queries an SQLite transactional database, com
 ---
 
 ## 2. Aggregation SQL Queries
-
 The report is powered by four primary SQL aggregations:
 
 ```sql
@@ -34,23 +34,27 @@ FROM orders
 GROUP BY created_at
 ORDER BY created_at DESC
 LIMIT 7;
+```
 
 ## 3. How to Run
 Prerequisites
 - Python 3.10+
 - Playwright Chromium installed (playwright install chromium)
 Insitallation:
+```Bash
 pip install fastapi uvicorn playwright
 playwright install chromium
-
+```
 # Seed the database (~200 orders, safe to run repeatedly)
 python3 seed.py
 Start the API Server:
+```Bash
 uvicorn main:app --reload --port 8000
-
+```
 
 ## 4. Verification & Terminal Proofs
 stage 4 proof: Generate and Serve by Link:
+```Bash
 $ time curl -i -X POST http://localhost:8000/reports
 HTTP/1.1 201 Created
 content-type: application/json
@@ -60,7 +64,10 @@ real    0m2.140s
 
 $ curl -o downloaded-report.pdf http://localhost:8000/reports/1/file
 # File downloaded successfully and verified as a multi-page PDF.
-stage 5 proof: Idempotency (Ask Twice, Get One)
+```
+
+stage 5 proof: Idempotency (Ask Twice, Get One):
+```Bash
 $ curl -s -X POST http://localhost:8000/reports
 {"id":1,"file":"/reports/1/file","message":"Report already generated today (idempotent result)"}
 
@@ -70,6 +77,7 @@ $ curl -s -X POST http://localhost:8000/reports
 # Forced re-generation:
 $ curl -s -X POST http://localhost:8000/reports -H "Content-Type: application/json" -d '{"force": true}'
 {"id":2,"file":"/reports/2/file"}
+```
 
 ## 5. Architectural Reflection Questions
 Stage 4: Moving Work to Background Jobs
