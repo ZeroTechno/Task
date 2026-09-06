@@ -1,10 +1,15 @@
 import uuid
+import logging
 from datetime import timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, field_validator
 import inngest
 import inngest.fast_api
+
+# Set up logging so heartbeat messages show in the console
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("report-service")
 
 app = FastAPI(title="Background Job API")
 
@@ -15,7 +20,6 @@ inngest_client = inngest.Inngest(
 
 reports_db = {}
 
-# Input validation: reject empty or whitespace-only topics
 class CreateReportRequest(BaseModel):
     topic: str
 
@@ -26,6 +30,7 @@ class CreateReportRequest(BaseModel):
             raise ValueError("Topic cannot be empty")
         return v.strip()
 
+# 1. say-hello function
 @inngest_client.create_function(
     fn_id="say-hello",
     trigger=inngest.TriggerEvent(event="test/hello"),
@@ -34,7 +39,7 @@ async def say_hello(ctx: inngest.Context):
     await ctx.step.sleep("wait-a-bit", timedelta(seconds=5))
     return "Hello from the background!"
 
-# make-report with retries=2 (total 3 attempts)
+# 2. make-report background function
 @inngest_client.create_function(
     fn_id="make-report",
     trigger=inngest.TriggerEvent(event="report/requested"),
@@ -45,10 +50,8 @@ async def make_report(ctx: inngest.Context):
     report_id = data.get("id")
     topic = data.get("topic", "general")
 
-    # Step 1: Simulate 8s delay
     await ctx.step.sleep("do-the-slow-work", timedelta(seconds=8))
 
-    # Step 2: Build report or trigger intentional failure
     def build_report():
         if topic.lower() == "fail":
             if report_id and report_id in reports_db:
@@ -64,10 +67,28 @@ async def make_report(ctx: inngest.Context):
     await ctx.step.run("build-report", build_report)
     return {"status": "done", "id": report_id}
 
+# 3. Scheduled cron heartbeat (runs every minute)
+@inngest_client.create_function(
+    fn_id="heartbeat",
+    trigger=inngest.TriggerCron(cron="* * * * *"),
+)
+async def heartbeat(ctx: inngest.Context):
+    pending_count = sum(1 for r in reports_db.values() if r.get("status") == "pending")
+    done_count = sum(1 for r in reports_db.values() if r.get("status") == "done")
+    failed_count = sum(1 for r in reports_db.values() if r.get("status") == "failed")
+
+    summary = (
+        f"[HEARTBEAT] Reports summary -> "
+        f"Pending: {pending_count}, Done: {done_count}, Failed: {failed_count}"
+    )
+    logger.info(summary)
+    return summary
+
+# Serve all three functions
 inngest.fast_api.serve(
     app,
     inngest_client,
-    [say_hello, make_report],
+    [say_hello, make_report, heartbeat],
 )
 
 @app.get("/health")
@@ -76,7 +97,6 @@ def health():
 
 @app.post("/reports", status_code=status.HTTP_202_ACCEPTED)
 async def create_report(req: Optional[dict] = None):
-    # Enforce 400 Bad Request on missing or empty payload
     if not req or "topic" not in req:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
