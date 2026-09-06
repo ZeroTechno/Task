@@ -2,7 +2,7 @@ import uuid
 from datetime import timedelta
 from typing import Optional
 from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 import inngest
 import inngest.fast_api
 
@@ -15,8 +15,16 @@ inngest_client = inngest.Inngest(
 
 reports_db = {}
 
+# Input validation: reject empty or whitespace-only topics
 class CreateReportRequest(BaseModel):
     topic: str
+
+    @field_validator("topic")
+    @classmethod
+    def validate_topic(cls, v: str):
+        if not v or not v.strip():
+            raise ValueError("Topic cannot be empty")
+        return v.strip()
 
 @inngest_client.create_function(
     fn_id="say-hello",
@@ -26,9 +34,11 @@ async def say_hello(ctx: inngest.Context):
     await ctx.step.sleep("wait-a-bit", timedelta(seconds=5))
     return "Hello from the background!"
 
+# make-report with retries=2 (total 3 attempts)
 @inngest_client.create_function(
     fn_id="make-report",
     trigger=inngest.TriggerEvent(event="report/requested"),
+    retries=2,
 )
 async def make_report(ctx: inngest.Context):
     data = ctx.event.data or {}
@@ -38,8 +48,13 @@ async def make_report(ctx: inngest.Context):
     # Step 1: Simulate 8s delay
     await ctx.step.sleep("do-the-slow-work", timedelta(seconds=8))
 
-    # Step 2: Update status
+    # Step 2: Build report or trigger intentional failure
     def build_report():
+        if topic.lower() == "fail":
+            if report_id and report_id in reports_db:
+                reports_db[report_id]["status"] = "failed"
+            raise Exception("The report oven is broken!")
+
         result = f"Detailed analysis and summary report for topic: {topic}"
         if report_id and report_id in reports_db:
             reports_db[report_id]["status"] = "done"
@@ -60,12 +75,26 @@ def health():
     return {"status": "ok"}
 
 @app.post("/reports", status_code=status.HTTP_202_ACCEPTED)
-async def create_report(req: CreateReportRequest):
+async def create_report(req: Optional[dict] = None):
+    # Enforce 400 Bad Request on missing or empty payload
+    if not req or "topic" not in req:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing required field: topic",
+        )
+
+    topic = str(req.get("topic", "")).strip()
+    if not topic:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Topic cannot be empty",
+        )
+
     report_id = str(uuid.uuid4())[:8]
 
     reports_db[report_id] = {
         "id": report_id,
-        "topic": req.topic,
+        "topic": topic,
         "status": "pending",
         "result": None,
     }
@@ -73,7 +102,7 @@ async def create_report(req: CreateReportRequest):
     await inngest_client.send(
         inngest.Event(
             name="report/requested",
-            data={"id": report_id, "topic": req.topic},
+            data={"id": report_id, "topic": topic},
         )
     )
 
