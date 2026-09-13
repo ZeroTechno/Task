@@ -42,18 +42,21 @@ Create a `.env.local` file in the root directory:
 ```env
 GROQ_API_KEY=your_groq_api_key
 INNGEST_DEV=1
-## 2. Install Dependencies
-'''
+```
+### 2. Install Dependencies
+```
 npm install
-'''
-## 3. Start Development Servers
+```
+### 3. Start Development Servers
 In your terminal run:
 ```
 npm run dev
 ```
+
 And in a second terminal for the Inngest Dev Server:
 ```
 npx inngest-cli@latest dev
 ```
+
 The web UI is at: http://localhost:3000
 The Inngest Dashboard is at: http://localhost:8288
