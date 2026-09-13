@@ -1,103 +1,90 @@
-"use client";
-
 import React, { memo } from "react";
 import { Handle, Position, NodeProps } from "@xyflow/react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 
 export interface DecisionNodeData {
   label: string;
   prompt: string;
+  status?: "idle" | "running" | "yes" | "no";
   onChangePrompt?: (id: string, prompt: string) => void;
-  status?: "idle" | "running" | "yes" | "no" | "failed";
 }
 
-export const DecisionNode = memo(({ id, data, isConnectable }: NodeProps) => {
-  const nodeData = data as unknown as DecisionNodeData;
-
+export const DecisionNode = memo(({ id, data, selected }: NodeProps<any>) => {
   const getBorderColor = () => {
-    switch (nodeData.status) {
-      case "running":
-        return "border-blue-500 ring-2 ring-blue-400";
-      case "yes":
-        return "border-emerald-500 ring-2 ring-emerald-400";
-      case "no":
-        return "border-rose-500 ring-2 ring-rose-400";
-      case "failed":
-        return "border-destructive ring-2 ring-destructive";
-      default:
-        return "border-border";
-    }
+    if (data.status === "running") return "border-blue-500 ring-2 ring-blue-400/50 animate-pulse";
+    if (data.status === "yes") return "border-emerald-500 ring-2 ring-emerald-400/40 shadow-emerald-950/20";
+    if (data.status === "no") return "border-rose-500 ring-2 ring-rose-400/40 shadow-rose-950/20";
+    if (selected) return "border-primary ring-2 ring-primary/30";
+    return "border-border";
   };
 
   return (
-    <Card className={`w-72 shadow-md bg-card transition-all ${getBorderColor()}`}>
-      {/* Incoming connection handle (Top) */}
+    <div
+      className={`relative w-[280px] rounded-xl border bg-card text-card-foreground shadow-md transition-all duration-300 p-4 ${getBorderColor()}`}
+    >
+      {/* Incoming edge handle */}
       <Handle
         type="target"
         position={Position.Top}
-        isConnectable={isConnectable}
-        className="w-3 h-3 bg-muted-foreground"
+        className="w-3 h-3 bg-muted-foreground border-2 border-background"
       />
 
-      <CardHeader className="p-3 pb-2 flex flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-sm font-semibold">{nodeData.label || "Decision Node"}</CardTitle>
-        {nodeData.status && nodeData.status !== "idle" && (
-          <Badge
-            variant={
-              nodeData.status === "yes"
-                ? "default"
-                : nodeData.status === "no"
-                ? "secondary"
-                : "outline"
-            }
-            className="text-[10px] uppercase tracking-wider"
+      <div className="flex items-center justify-between pb-2 border-b mb-3">
+        <span className="font-semibold text-xs tracking-wide uppercase text-foreground">
+          {data.label}
+        </span>
+        {data.status && data.status !== "idle" && (
+          <span
+            className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${
+              data.status === "yes"
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : data.status === "no"
+                ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                : "bg-blue-500/10 text-blue-600 animate-pulse"
+            }`}
           >
-            {nodeData.status}
-          </Badge>
+            {data.status}
+          </span>
         )}
-      </CardHeader>
+      </div>
 
-      <CardContent className="p-3 pt-0">
-        <label className="text-[11px] text-muted-foreground block mb-1">
+      <div className="space-y-1.5">
+        <label className="text-[11px] text-muted-foreground font-medium block">
           Decision Prompt (must resolve to YES/NO):
         </label>
-        <Textarea
-          className="text-xs resize-none nodrag"
+        <textarea
           rows={3}
-          placeholder="e.g. Is this user request asking for technical support?"
-          value={nodeData.prompt || ""}
-          onChange={(e) => nodeData.onChangePrompt?.(id, e.target.value)}
+          value={data.prompt}
+          onChange={(e) => data.onChangePrompt?.(id, e.target.value)}
+          placeholder="e.g. Is this request urgent?"
+          className="w-full text-xs p-2.5 rounded-lg border bg-muted/40 resize-none focus:outline-none focus:ring-1 focus:ring-primary focus:bg-background transition"
         />
+      </div>
 
-        {/* Output Branch Handles */}
-        <div className="flex justify-between items-center mt-3 pt-2 border-t text-[10px] font-semibold">
-          <div className="flex items-center gap-1 text-emerald-600">
-            <span>YES</span>
-            <Handle
-              type="source"
-              position={Position.Bottom}
-              id="yes"
-              style={{ left: "25%" }}
-              isConnectable={isConnectable}
-              className="w-3 h-3 bg-emerald-500"
-            />
-          </div>
-          <div className="flex items-center gap-1 text-rose-600">
-            <Handle
-              type="source"
-              position={Position.Bottom}
-              id="no"
-              style={{ left: "75%" }}
-              isConnectable={isConnectable}
-              className="w-3 h-3 bg-rose-500"
-            />
-            <span>NO</span>
-          </div>
+      {/* YES Handle */}
+      <div className="flex justify-between items-center mt-3 pt-2 text-[11px] font-bold text-muted-foreground border-t border-muted/50">
+        <div className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+          <span>YES</span>
         </div>
-      </CardContent>
-    </Card>
+        <div className="flex items-center gap-1.5 text-rose-600 dark:text-rose-400">
+          <span>NO</span>
+        </div>
+      </div>
+
+      <Handle
+        type="source"
+        id="yes"
+        position={Position.Bottom}
+        className="!left-[25%] w-3 h-3 !bg-emerald-500 border-2 border-background"
+      />
+
+      {/* NO Handle */}
+      <Handle
+        type="source"
+        id="no"
+        position={Position.Bottom}
+        className="!left-[75%] w-3 h-3 !bg-rose-500 border-2 border-background"
+      />
+    </div>
   );
 });
 
