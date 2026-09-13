@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Visual AI Workflow Builder
+
+A node-based visual workflow engine that evaluates natural language inputs against AI decision steps (`YES`/`NO`), routes branching paths dynamically, and orchestrates executions with Inngest and Groq LLMs.
+
+---
+
+## Tech Stack
+
+- **Framework**: Next.js 15 (App Router, React 19, TypeScript, Tailwind CSS)
+- **Canvas / Flow**: `@xyflow/react` (React Flow v12)
+- **Workflow Orchestration**: Inngest (Durable functions, step retries, run traces)
+- **LLM Inference**: Groq API (`qwen/qwen3.6-27b` via OpenAI SDK)
+
+---
+
+## Core Features
+
+1. **Interactive Graph Canvas**:
+   - Add, edit, connect, and delete **Decision Nodes** and **Terminal Action Nodes**.
+   - Distinct source handles for `YES` (emerald) and `NO` (rose) branches with smoothstep bezier connections.
+2. **AI-Powered Branching**:
+   - Evaluates input scenarios step-by-step against node prompts.
+   - Strictly enforces binary `YES` or `NO` completions with constrained output tokens.
+3. **Live Execution Feedback**:
+   - Traversed edges animate dynamically along the selected path.
+   - Visited nodes illuminate in green (`YES`), red (`NO`), or amber (`Action`).
+4. **Execution Logs & Inspection**:
+   - Built-in slide-out trace drawer displaying timestamps, prompts, and evaluation outputs.
+   - Direct integration link to the Inngest execution dashboard.
+5. **Portability & Persistence**:
+   - Auto-save to `localStorage`.
+   - Export and import graphs as formatted JSON files.
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### 1. Environment Configuration
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Create a `.env.local` file in the root directory:
+
+```env
+GROQ_API_KEY=your_groq_api_key
+INNGEST_DEV=1
+## 2. Install Dependencies
+'''
+npm install
+'''
+## 3. Start Development Servers
+In your terminal run:
 ```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+npm run dev
+```
+And in a second terminal for the Inngest Dev Server:
+```
+npx inngest-cli@latest dev
+```
+The web UI is at: http://localhost:3000
+The Inngest Dashboard is at: http://localhost:8288
