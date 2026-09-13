@@ -4,9 +4,11 @@ import OpenAI from "openai";
 
 interface WorkflowNode {
   id: string;
+  type?: string;
   data: {
     label: string;
-    prompt: string;
+    prompt?: string;
+    actionType?: string;
   };
 }
 
@@ -25,13 +27,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Input context is required" }, { status: 400 });
     }
 
-    // 1. Dispatch event to Inngest for background logging and durability
     inngest.send({
       name: "workflow/execute",
       data: { inputContext, nodes, edges },
     }).catch((err) => console.error("Inngest dispatch error:", err));
 
-    // 2. Perform traversal synchronously for instant UI visualization
     const client = new OpenAI({
       apiKey: process.env.GROQ_API_KEY || "",
       baseURL: "https://api.groq.com/openai/v1",
@@ -43,13 +43,26 @@ export async function POST(req: Request) {
     const executionLog: Array<{
       nodeId: string;
       label: string;
-      prompt: string;
-      decision: "YES" | "NO";
+      type: string;
+      decision?: "YES" | "NO";
+      action?: string;
     }> = [];
 
     while (currentNode) {
       const activeNode = currentNode;
 
+      // Check if it's an Action Node
+      if (activeNode.type === "actionNode") {
+        executionLog.push({
+          nodeId: activeNode.id,
+          label: activeNode.data.label,
+          type: "action",
+          action: activeNode.data.actionType || "slack",
+        });
+        break; // Terminal node reached
+      }
+
+      // Otherwise evaluate Decision Node
       const response = await client.chat.completions.create({
         model: "qwen/qwen3.6-27b",
         temperature: 0,
@@ -73,7 +86,7 @@ export async function POST(req: Request) {
       executionLog.push({
         nodeId: activeNode.id,
         label: activeNode.data.label,
-        prompt: activeNode.data.prompt,
+        type: "decision",
         decision,
       });
 
